@@ -7,17 +7,29 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const taskRoutes = require('./routes/taskroutes');
 
-require('./config/passport'); 
-
+require('./config/passport');
 dotenv.config();
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://taskflowapplication1.netlify.app'
+];
 
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true, 
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // <-- handle preflight requests
 
 app.use(express.json());
 
@@ -28,26 +40,22 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log('MongoDB connected'))
 .catch(err => console.error('MongoDB connection error:', err));
 
-
 app.use(session({
   secret: process.env.SESSION_SECRET || 'defaultsecret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    httpOnly: true,
-    secure: false,
-    maxAge: 1000 * 60 * 60 * 24, 
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'None',
+    maxAge: 1000 * 60 * 60 * 24,
   },
 }));
 
 app.use(passport.initialize());
 app.use(passport.session());
 
-
 app.use('/auth', authRoutes);
-app.use('/auth', require('./routes/auth'));
 app.use('/api/tasks', taskRoutes);
-
 
 app.get('/me', (req, res) => {
   if (req.isAuthenticated()) {
@@ -56,7 +64,6 @@ app.get('/me', (req, res) => {
     res.status(401).json({ message: 'Not authenticated' });
   }
 });
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
